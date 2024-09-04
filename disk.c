@@ -37,6 +37,7 @@ Disk* disk_init(const char* filename, int format) {
     return disk;
 }
 
+// Formatta il disco (principalmente è un helper per disk_init)
 void disk_format(Disk* disk) {
     memset(disk->data, 0, DISK_SIZE);
     disk->size = DISK_SIZE;
@@ -46,4 +47,42 @@ void disk_format(Disk* disk) {
     }
 }
 
+// Legge un blocco dal disco
+void disk_read(Disk* disk, int block, char* buffer) {
+    if (block >= FAT_SIZE) {
+        perror("Error reading block: block exceeds FAT size");
+        exit(EXIT_FAILURE);
+    }
 
+    if (disk->fat.entries[block].file == -2) {
+        perror("Error reading block: block not used");
+        exit(EXIT_FAILURE);
+    }
+
+    memcpy(buffer, disk->data + block * BLOCK_SIZE, BLOCK_SIZE);
+}
+
+// scrive un blocco sul disco
+void disk_write(Disk* disk, int block, const char* buffer) {
+    if (block >= FAT_SIZE) {
+        perror("Error writing block: block exceeds FAT size");
+        exit(EXIT_FAILURE);
+    }
+
+    memcpy(disk->data + block * BLOCK_SIZE, buffer, BLOCK_SIZE);
+
+    if (disk->fat.entries[block].file == -2) {
+        disk->fat.entries[block].file = 1;
+        disk->fat.free_blocks--;
+    }
+}
+
+// Chiude il disco liberando la memoria
+void disk_close(Disk* disk) {
+    int ret = munmap(disk, DISK_SIZE);
+    if (ret == -1) {
+        perror("Error unmapping file");
+        exit(EXIT_FAILURE);
+    }
+
+}

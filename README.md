@@ -17,3 +17,8 @@ L2. File System FAT .
 
    The opening of a file should return a "FileHandle" that stores the position in a file.
 ```
+
+To execute the code use these commands:
+```bash
+gcc disk.c test_disk.c -o test_disc
+```

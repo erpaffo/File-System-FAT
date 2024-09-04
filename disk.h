@@ -32,3 +32,6 @@ typedef struct {
 
 Disk* disk_init(const char* filename, int format);
 void disk_format(Disk* disk);
+void disk_read(Disk* disk, int block, char* buffer);
+void disk_write(Disk* disk, int block, const char* buffer);
+void disk_close(Disk* disk);
