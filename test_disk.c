@@ -1,10 +1,8 @@
 #include "disk.h"
 
-#define DEBUG 1
-
 int main() {
     if (DEBUG) {
-        printf("=======Test disk(=======\n");
+        printf("=======Test disk=======\n");
         printf("Inizializzazione del disco\n");
     }
     Disk* disk = disk_init("test_disk.bin", 1);
@@ -26,4 +24,6 @@ int main() {
     printf("Dati letti dal disco: %s\n", buffer);
 
     disk_close(disk);
+
+    return 0;
 }
