@@ -36,3 +36,22 @@ void fat_free_block(Fat* fat, int block) {
     fat->free_blocks++;
 }
 
+// eestituisce il blocco successivo
+int fat_get_next_block(Fat* fat, int block) {
+    if (block < 0 || block >= FAT_SIZE) {
+        printf("Errore: blocco non valido\n");
+        return -1;
+    }
+
+    return fat->entries[block].next_block;
+}
+
+// Imposta il blocco successivo
+void fat_set_next_block(Fat* fat, int block, int next_block) {
+    if (block < 0 || block >= FAT_SIZE) {
+        printf("Errore: blocco non valido\n");
+        return;
+    }
+
+    fat->entries[block].next_block = next_block;
+}
