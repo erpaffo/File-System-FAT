@@ -33,10 +33,11 @@ int fat_alloc_block(Fat* fat) {
 // Libera un blocco
 void fat_free_block(Fat* fat, int block) {
     fat->entries[block].file = -2;
+    fat->entries[block].next_block = -1;
     fat->free_blocks++;
 }
 
-// eestituisce il blocco successivo
+// Restituisce il blocco successivo
 int fat_get_next_block(Fat* fat, int block) {
     if (block < 0 || block >= FAT_SIZE) {
         printf("Errore: blocco non valido\n");
