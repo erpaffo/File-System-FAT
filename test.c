@@ -164,6 +164,10 @@ void test_write_file() {
     char buffer[BLOCK_SIZE];
     disk_read(disk, file->start_block, buffer);
 
+    if (DEBUG) {
+        printf("Dati letti dal disco: %s\n", buffer);
+    }
+
     if (strcmp(buffer, data_to_write) != 0) {
         printf("Errore: I dati scritti non corrispondono\n");
         return;
@@ -200,11 +204,72 @@ void test_read_file() {
     disk_close(disk);
 }
 
+void test_erase_file() {
+    printf("=======================\n");
+    printf("Test erase_file\n");
+    printf("=======================\n");
+
+    Disk* disk = disk_init("test_disk.bin", 1);
+    FileHandle* file = create_file(disk, "test_file");
+
+    const char* data_to_write = "Dati da cancellare!";
+    write_file(file, disk, data_to_write, strlen(data_to_write) + 1);
+
+    char buffer[BLOCK_SIZE];
+    disk_read(disk, file->start_block, buffer);
+    if (strcmp(buffer, data_to_write) != 0) {
+        printf("Errore: I dati scritti non corrispondono prima della cancellazione\n");
+        return;
+    }
+
+    erase_file(disk, file, "test_file");
+
+    if (disk->fat.entries[file->start_block].file != -2) {
+        printf("Errore: Il file non è stato cancellato correttamente\n");
+    } else {
+        printf("erase_file: OK\n");
+    }
+
+    free(file);
+    disk_close(disk);
+}
+
+void test_seek_file() {
+    printf("=======================\n");
+    printf("Test seek_file\n");
+    printf("=======================\n");
+
+    Disk* disk = disk_init("test_disk.bin", 1);
+    FileHandle* file = create_file(disk, "test_file");
+
+    const char* data_to_write = "Questa è una stringa lunga per testare seek!";
+    write_file(file, disk, data_to_write, strlen(data_to_write) + 1);
+
+    seek_file(file, disk, 10);  // Sposta la posizione a 10 byte
+
+    char buffer[BLOCK_SIZE];
+    read_file(file, disk, buffer, strlen(data_to_write) - 10);  // Legge dal byte 10 in poi
+
+    if (strcmp(buffer, data_to_write + 10) != 0) {
+        printf("Errore: I dati letti dopo il seek non corrispondono\n");
+        return;
+    }
+
+    printf("seek_file: OK\n");
+
+    free(file);
+    disk_close(disk);
+}
+
+
+
 int main() {
     test_disk();
     test_fat();
     test_create_file();
     test_write_file();
     test_read_file();
+    test_erase_file();
+    test_seek_file();
     return 0;
 }

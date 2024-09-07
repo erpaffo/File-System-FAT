@@ -12,9 +12,9 @@ typedef struct {
 } FileHandle;
 
 FileHandle* create_file(Disk* disk, const char* filename);
-void erase_file(Disk* disk, const char* filename);
 void write_file(FileHandle* handle, Disk* disk, const void* buffer, int size);
 void read_file(FileHandle* handle, Disk* disk, void* buffer, int size);
-void seek_file(FileHandle* handle, int offset);
+void erase_file(Disk* disk, FileHandle* handle, const char* filename);
+void seek_file(FileHandle* handle, Disk *disk, int offset);
 FileHandle* open_file(Disk* disk, const char* filename);
 void close_file(FileHandle* handle);

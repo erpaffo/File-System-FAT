@@ -1,5 +1,6 @@
 #include "file.h"
 
+// Crea file
 FileHandle* create_file(Disk *disk, const char* filename) {
 
     int free_block = fat_alloc_block(&disk->fat);
@@ -20,6 +21,7 @@ FileHandle* create_file(Disk *disk, const char* filename) {
     return handle;
 }
 
+// Scrive su file
 void write_file(FileHandle* handle, Disk* disk, const void* buffer, int size) {
     int block = handle->current_block;
     int position = handle->position;
@@ -52,6 +54,7 @@ void write_file(FileHandle* handle, Disk* disk, const void* buffer, int size) {
     handle->size += size;
 }
 
+// Legge da file
 void read_file(FileHandle* handle, Disk* disk, void* buffer, int size) {
     int block = handle->start_block;
     int position = handle->position;
@@ -73,5 +76,33 @@ void read_file(FileHandle* handle, Disk* disk, void* buffer, int size) {
         }
     }
 
+    handle->position = position;
+}
+
+// Cancella file
+void erase_file(Disk* disk, FileHandle* handle, const char* filename) {
+    int current_block = handle->start_block;
+    while (current_block != -1) {
+        int next_block = fat_get_next_block(&disk->fat, current_block);
+        fat_free_block(&disk->fat, current_block);
+        current_block = next_block;
+    }
+}
+
+// Sposta all'offset specificato
+void seek_file(FileHandle* handle, Disk* disk, int offset) {
+    handle->position = offset;
+
+    int current_block = handle->start_block;
+    int current_offset = 0;
+
+    while (current_offset + BLOCK_SIZE <= offset) {
+        current_block = fat_get_next_block(&disk->fat, current_block);
+        current_offset += BLOCK_SIZE;
+    }
+
+    int position = offset - current_offset;
+
+    handle->current_block = current_block;
     handle->position = position;
 }

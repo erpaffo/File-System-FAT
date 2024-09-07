@@ -20,5 +20,6 @@ L2. File System FAT .
 
 To execute the code use these commands:
 ```bash
-gcc disk.c test_disk.c -o test_disc
+gcc -o test test.c disk.c fat.c file.c
+./test
 ```
