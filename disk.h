@@ -7,7 +7,7 @@
 #include <fcntl.h>
 #include <sys/mman.h>
 
-#define DEBUG 1
+#define DEBUG 0
 
 #define DISK_SIZE 1024*1024 // 1MB
 #define BLOCK_SIZE 512 // 512B

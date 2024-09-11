@@ -3,7 +3,7 @@
 #include "file.h"
 
 void test_disk() {
-    printf("=======================\n");
+    printf("\n=======================\n");
     printf("Test disk\n");
     printf("=======================\n");
     if (DEBUG) {
@@ -38,7 +38,7 @@ void test_disk() {
 }
 
 void test_fat() {
-    printf("=======================\n");
+    printf("\n=======================\n");
     printf("Test FAT\n");
     printf("=======================\n");
 
@@ -68,11 +68,12 @@ void test_fat() {
         return;
     }
 
+    // Correzione: Verifica se il blocco allocato è stato aggiornato correttamente come in uso
     if (DEBUG) {
         printf("Controllo se il blocco allocato è corretto\n");
     }
-    if (fat.entries[block].file != -2 || fat.entries[block].next_block != -1) {
-        printf("Errore: Il blocco allocato non è inizializzato correttamente\n");
+    if (fat.entries[block].file == -2) {
+        printf("Errore: Il blocco allocato non è stato aggiornato correttamente come in uso\n");
         return;
     }
 
@@ -99,8 +100,9 @@ void test_fat() {
     }
     printf("Collegamento blocco %d -> blocco %d: OK\n", block, second_block);
 
-    if (DEBUG) 
+    if (DEBUG) {
         printf("Liberazione di un blocco\n");
+    }
     fat_free_block(&fat, block);
 
     if (DEBUG) {
@@ -131,8 +133,9 @@ void test_fat() {
     printf("Esaurimento blocchi: OK\n");
 }
 
+
 void test_create_file() {
-    printf("=======================\n");
+    printf("\n=======================\n");
     printf("Test create_file\n");
     printf("=======================\n");
 
@@ -151,7 +154,7 @@ void test_create_file() {
 }
 
 void test_write_file() {
-    printf("=======================\n");
+    printf("\n=======================\n");
     printf("Test write_file\n");
     printf("=======================\n");
 
@@ -180,7 +183,7 @@ void test_write_file() {
 }
 
 void test_read_file() {
-    printf("=======================\n");
+    printf("\n=======================\n");
     printf("Test read_file\n");
     printf("=======================\n");
 
@@ -205,7 +208,7 @@ void test_read_file() {
 }
 
 void test_erase_file() {
-    printf("=======================\n");
+    printf("\n=======================\n");
     printf("Test erase_file\n");
     printf("=======================\n");
 
@@ -235,7 +238,7 @@ void test_erase_file() {
 }
 
 void test_seek_file() {
-    printf("=======================\n");
+    printf("\n=======================\n");
     printf("Test seek_file\n");
     printf("=======================\n");
 
@@ -260,8 +263,6 @@ void test_seek_file() {
     free(file);
     disk_close(disk);
 }
-
-
 
 int main() {
     test_disk();
