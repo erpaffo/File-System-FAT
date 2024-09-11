@@ -58,11 +58,19 @@ Disk* disk_init(const char* filename, int format) {
 
 // Formatta il disco (principalmente è un helper per disk_init)
 void disk_format(Disk* disk) {
-    memset(disk->data, 0, DISK_SIZE-sizeof(Disk));
+    memset(disk->data, 0, DISK_SIZE - sizeof(Disk));
     disk->size = DISK_SIZE;
+
+    // Imposta tutti i blocchi come liberi
     for (int i = 0; i < FAT_SIZE; i++) {
-        disk->fat.entries[i].next_block = -2;  // -2 indica blocco non usato
-        disk->fat.entries[i].file = -2;        // -2 indica blocco non usato
+        disk->fat.entries[i].next_block = -1; 
+        disk->fat.entries[i].file = -2;       
+    }
+
+    disk->fat.free_blocks = FAT_SIZE;
+
+    if (DEBUG) {
+        printf("Disk formatted. Free blocks: %d\n", disk->fat.free_blocks);
     }
 }
 
@@ -81,7 +89,7 @@ void disk_read(Disk* disk, int block, char* buffer) {
     memcpy(buffer, disk->data + block * BLOCK_SIZE, BLOCK_SIZE);
 }
 
-// scrive un blocco sul disco
+// Scrive un blocco sul disco
 void disk_write(Disk* disk, int block, const char* buffer) {
     if (block >= FAT_SIZE) {
         perror("Error writing block: block exceeds FAT size");
@@ -91,8 +99,12 @@ void disk_write(Disk* disk, int block, const char* buffer) {
     memcpy(disk->data + block * BLOCK_SIZE, buffer, BLOCK_SIZE);
 
     if (disk->fat.entries[block].file == -2) {
-        disk->fat.entries[block].file = 1;
-        disk->fat.free_blocks--;
+        disk->fat.entries[block].file = 1;  
+        disk->fat.free_blocks--;  
+        
+        if (DEBUG) {
+            printf("Blocco %d allocato. Blocchi liberi rimanenti: %d\n", block, disk->fat.free_blocks);
+        }
     }
 }
 
@@ -103,5 +115,4 @@ void disk_close(Disk* disk) {
         perror("Error unmapping file");
         exit(EXIT_FAILURE);
     }
-
 }

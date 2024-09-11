@@ -2,39 +2,41 @@
 #include "fat.h"
 #include "file.h"
 
+// Variabili globali per il conteggio dei test passati e falliti
+int tests_passed = 0;
+int tests_failed = 0;
+
+// Funzione per registrare il passaggio di un test
+void test_pass(const char* test_name) {
+    printf("[PASSED] %s\n", test_name);
+    tests_passed++;
+}
+
+// Funzione per registrare il fallimento di un test
+void test_fail(const char* test_name) {
+    printf("[FAILED] %s\n", test_name);
+    tests_failed++;
+}
+
 void test_disk() {
     printf("\n=======================\n");
     printf("Test disk\n");
     printf("=======================\n");
-    if (DEBUG) {
-        printf("Inizializzazione del disco\n");
-    }
     Disk* disk = disk_init("test_disk.bin", 1);
 
     const char* data_to_write = "Test di Prova per Disco!";
-    
-    if (DEBUG) {
-        printf("Scrittura su disco\n");
-    }
     disk_write(disk, 0, data_to_write);
 
     char buffer[BLOCK_SIZE];
-
-    if (DEBUG) {
-        printf("Lettura su disco\n");
-    }
     disk_read(disk, 0, buffer);
 
-    printf("Dati letti dal disco: %s\n", buffer);
-
-    if (DEBUG) {
-        printf("Chiusura del disco\n");
+    if (strcmp(buffer, data_to_write) == 0) {
+        test_pass("test_disk");
+    } else {
+        test_fail("test_disk");
     }
+
     disk_close(disk);
-
-    if (DEBUG) {
-        printf("Test completato\n");
-    }
 }
 
 void test_fat() {
@@ -43,79 +45,37 @@ void test_fat() {
     printf("=======================\n");
 
     Fat fat;
-
-    if (DEBUG) {
-        printf("Inizializzazione della FAT\n");
-    }
     fat_init(&fat);
 
-    if (DEBUG) {
-        printf("Controllo se tutti i blocchi sono vuoti\n");
-    }
     for (int i = 0; i < FAT_SIZE; i++) {
         if (fat.entries[i].file != -2 || fat.entries[i].next_block != -1) {
-            printf("Errore: Il blocco %d non è inizializzato correttamente\n", i);
+            test_fail("test_fat");
             return;
         }
     }
 
-    if (DEBUG) {
-        printf("Allocazione di un blocco\n");
-    }
     int block = fat_alloc_block(&fat);
-    if (block == -1) {
-        printf("Errore: impossibile allocare un blocco\n");
+    if (block == -1 || fat.entries[block].file == -2) {
+        test_fail("test_fat");
         return;
     }
 
-    // Correzione: Verifica se il blocco allocato è stato aggiornato correttamente come in uso
-    if (DEBUG) {
-        printf("Controllo se il blocco allocato è corretto\n");
-    }
-    if (fat.entries[block].file == -2) {
-        printf("Errore: Il blocco allocato non è stato aggiornato correttamente come in uso\n");
-        return;
-    }
-
-    if (DEBUG) {
-        printf("Allocazione di un altro blocco\n");
-    }
     int second_block = fat_alloc_block(&fat);
     if (second_block == -1) {
-        printf("Errore: impossibile allocare il secondo blocco\n");
+        test_fail("test_fat");
         return;
     }
 
-    if (DEBUG) {
-        printf("Collegamento tra i due blocchi\n");
-    }
     fat_set_next_block(&fat, block, second_block);
-
-    if (DEBUG) {
-        printf("Controllo del collegamento tra i due blocchi\n");
-    }
     if (fat_get_next_block(&fat, block) != second_block) {
-        printf("Errore: Collegamento tra blocchi fallito\n");
+        test_fail("test_fat");
         return;
     }
-    printf("Collegamento blocco %d -> blocco %d: OK\n", block, second_block);
 
-    if (DEBUG) {
-        printf("Liberazione di un blocco\n");
-    }
     fat_free_block(&fat, block);
-
-    if (DEBUG) {
-        printf("Verifica blocco liberato correttamente\n");
-    }
     if (fat.entries[block].file != -2 || fat.entries[block].next_block != -1) {
-        printf("Errore: Il blocco %d non è stato liberato correttamente\n", block);
+        test_fail("test_fat");
         return;
-    }
-    printf("Liberazione blocco %d: OK\n", block);
-
-    if (DEBUG) {
-        printf("Allocazione di tutti i blocchi\n");
     }
 
     int alloc_count = 0;
@@ -123,16 +83,12 @@ void test_fat() {
         alloc_count++;
     }
 
-    if (DEBUG) {
-        printf("Verifica dell'allocazione di tutti i blocchi\n");
+    if (alloc_count == FAT_SIZE - 1) {
+        test_pass("test_fat");
+    } else {
+        test_fail("test_fat");
     }
-    if (alloc_count != FAT_SIZE - 1) {
-        printf("Errore: Blocco esaurito non gestito correttamente. Alloc count: %d\n", alloc_count);
-        return;
-    }
-    printf("Esaurimento blocchi: OK\n");
 }
-
 
 void test_create_file() {
     printf("\n=======================\n");
@@ -142,12 +98,11 @@ void test_create_file() {
     Disk* disk = disk_init("test_disk.bin", 1);
     FileHandle* file = create_file(disk, "test_file");
 
-    if (file == NULL) {
-        printf("Errore: create_file ha restituito NULL\n");
-        return;
+    if (file != NULL) {
+        test_pass("test_create_file");
+    } else {
+        test_fail("test_create_file");
     }
-
-    printf("create_file: OK\n");
 
     free(file);
     disk_close(disk);
@@ -167,16 +122,11 @@ void test_write_file() {
     char buffer[BLOCK_SIZE];
     disk_read(disk, file->start_block, buffer);
 
-    if (DEBUG) {
-        printf("Dati letti dal disco: %s\n", buffer);
+    if (strcmp(buffer, data_to_write) == 0) {
+        test_pass("test_write_file");
+    } else {
+        test_fail("test_write_file");
     }
-
-    if (strcmp(buffer, data_to_write) != 0) {
-        printf("Errore: I dati scritti non corrispondono\n");
-        return;
-    }
-
-    printf("write_file: OK\n");
 
     free(file);
     disk_close(disk);
@@ -196,12 +146,11 @@ void test_read_file() {
     char buffer[BLOCK_SIZE];
     read_file(file, disk, buffer, strlen(data_to_write) + 1);
 
-    if (strcmp(buffer, data_to_write) != 0) {
-        printf("Errore: I dati letti non corrispondono\n");
-        return;
+    if (strcmp(buffer, data_to_write) == 0) {
+        test_pass("test_read_file");
+    } else {
+        test_fail("test_read_file");
     }
-
-    printf("read_file: OK\n");
 
     free(file);
     disk_close(disk);
@@ -218,19 +167,12 @@ void test_erase_file() {
     const char* data_to_write = "Dati da cancellare!";
     write_file(file, disk, data_to_write, strlen(data_to_write) + 1);
 
-    char buffer[BLOCK_SIZE];
-    disk_read(disk, file->start_block, buffer);
-    if (strcmp(buffer, data_to_write) != 0) {
-        printf("Errore: I dati scritti non corrispondono prima della cancellazione\n");
-        return;
-    }
-
     erase_file(disk, file, "test_file");
 
-    if (disk->fat.entries[file->start_block].file != -2) {
-        printf("Errore: Il file non è stato cancellato correttamente\n");
+    if (disk->fat.entries[file->start_block].file == -2) {
+        test_pass("test_erase_file");
     } else {
-        printf("erase_file: OK\n");
+        test_fail("test_erase_file");
     }
 
     free(file);
@@ -253,12 +195,15 @@ void test_seek_file() {
     char buffer[BLOCK_SIZE];
     read_file(file, disk, buffer, strlen(data_to_write) - 10);  // Legge dal byte 10 in poi
 
-    if (strcmp(buffer, data_to_write + 10) != 0) {
-        printf("Errore: I dati letti dopo il seek non corrispondono\n");
-        return;
+    if (DEBUG) {
+        printf("[DEBUG] Dati letti: %s\n", buffer);
+        printf("[DEBUG] Dati attesi: %s\n", data_to_write + 10);
     }
-
-    printf("seek_file: OK\n");
+    if (strcmp(buffer, data_to_write + 10) == 0) {
+        test_pass("test_seek_file");
+    } else {
+        test_fail("test_seek_file");
+    }
 
     free(file);
     disk_close(disk);
@@ -272,5 +217,12 @@ int main() {
     test_read_file();
     test_erase_file();
     test_seek_file();
+
+    // Riassunto dei risultati
+    printf("\n=======================\n");
+    printf("Test Summary\n");
+    printf("=======================\n");
+    printf("Tests passed: %d\n", tests_passed);
+    printf("Tests failed: %d\n", tests_failed);
     return 0;
 }
