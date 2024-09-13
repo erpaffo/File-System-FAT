@@ -2,7 +2,6 @@
 
 #include "disk.h"
 #include "fat.h"
-#include "file.h"
 
 #define MAX_DIR_NAME 100
 #define MAX_FILES_PER_DIR 20

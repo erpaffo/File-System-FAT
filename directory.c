@@ -1,4 +1,6 @@
 #include "directory.h"
+#include "file.h"
+
 
 // Crea una nuova directory
 Directory* create_dir(Disk* disk, Directory* parent, const char* dirname) {
