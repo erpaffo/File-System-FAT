@@ -2,7 +2,6 @@
 
 // Crea file
 FileHandle* create_file(Disk *disk, const char* filename) {
-
     int free_block = fat_alloc_block(&disk->fat);
     if (free_block == -1) {
         printf("Errore: Nessun blocco libero\n");
@@ -10,16 +9,20 @@ FileHandle* create_file(Disk *disk, const char* filename) {
     }
 
     FileHandle* handle = (FileHandle*) malloc(sizeof(FileHandle));
-    handle -> start_block = free_block;
-    handle -> current_block = free_block;
+    handle->start_block = free_block;
+    handle->current_block = free_block;
     handle->position = 0;
-    handle -> size = 0;
+    handle->size = 0;
 
     if (DEBUG) {
         printf("Creazione file %s. Primo blocco: %d\n", filename, free_block);
     }
+
+    disk_write(disk, free_block, (const char*) handle);
+
     return handle;
 }
+
 
 // Scrive su file
 void write_file(FileHandle* handle, Disk* disk, const void* buffer, int size) {

@@ -19,14 +19,15 @@ Directory* create_dir(Disk* disk, Directory* parent, const char* dirname) {
         printf("Creazione directory %s. Primo blocco: %d\n", dirname, free_block);
     }
 
-    disk_write(disk, free_block, (const char*)dir);
+    disk_write(disk, free_block, (const char*) dir);
 
     if (parent != NULL) {
+        // Aggiorna la directory padre
         parent->entries[parent->num_entries].start_block = free_block;
         parent->entries[parent->num_entries].is_directory = 1;
         strncpy(parent->entries[parent->num_entries].name, dirname, MAX_DIR_NAME - 1);
         parent->num_entries++;
-        disk_write(disk, parent->start_block, (const char*)parent);
+        disk_write(disk, parent->start_block, (const char*) parent);
     }
 
     return dir;
@@ -59,7 +60,7 @@ void change_dir(Disk* disk, Directory** current_dir, const char* dirname) {
     for (int i = 0; i < (*current_dir)->num_entries; i++) {
         if ((*current_dir)->entries[i].is_directory && strcmp((*current_dir)->entries[i].name, dirname) == 0) {
             Directory* new_dir = (Directory*) malloc(sizeof(Directory));
-            disk_read(disk, (*current_dir)->entries[i].start_block, (char*)new_dir);
+            disk_read(disk, (*current_dir)->entries[i].start_block, (char*) new_dir);
             *current_dir = new_dir;
 
             if (DEBUG) {
