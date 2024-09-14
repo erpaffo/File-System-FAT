@@ -19,7 +19,14 @@ L2. File System FAT .
 ```
 
 To execute the code use these commands:
+* To compile and execute tests:
 ```bash
-gcc -o test test.c disk.c fat.c file.c
+gcc test.c disk.c fat.c file.c directory.c -o test
 ./test
 ```
+* To compile and execute shell:
+```bash
+make
+./shell
+```
+Use `help` to see the available commands in the shell

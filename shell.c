@@ -1,12 +1,12 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <readline/readline.h>
+#include <readline/history.h>
 #include "disk.h"
 #include "fat.h"
 #include "directory.h"
 #include "file.h"
-#include <readline/readline.h>
-#include <readline/history.h>
 
 
 #define MAX_INPUT_SIZE 1024
@@ -151,25 +151,37 @@ void execute_command(char* input, Disk* disk, Directory** current_dir) {
         }
     } else if (strcmp(args[0], "write") == 0) {
         if (arg_count < 2) {
-            printf("Usage: write filename\n");
+            printf("Usage: write filename [text]\n");
         } else {
             const char* filename = args[1];
 
             // Cerca se il file esiste
             FileHandle* file = open_file(disk, *current_dir, filename);
             if (file == NULL) {
-                // Il file non esiste, crealo
-                file = create_file(disk, filename);
-                if (file == NULL) {
-                    printf("Errore nella creazione del file\n");
+                printf("Il file %s non esiste.\n", filename);
+                // Chiedi all'utente se vuole creare il file
+                printf("Vuoi creare il file? (s/n): ");
+                char response[10];
+                fgets(response, sizeof(response), stdin);
+                // Rimuovi il carattere di nuova linea
+                response[strcspn(response, "\n")] = 0;
+                if (strcmp(response, "s") == 0 || strcmp(response, "S") == 0) {
+                    // Il file non esiste, crealo
+                    file = create_file(disk, filename);
+                    if (file == NULL) {
+                        printf("Errore nella creazione del file\n");
+                        return;
+                    }
+                    // Aggiorna la directory corrente
+                    (*current_dir)->entries[(*current_dir)->num_entries].start_block = file->start_block;
+                    (*current_dir)->entries[(*current_dir)->num_entries].is_directory = 0;
+                    strncpy((*current_dir)->entries[(*current_dir)->num_entries].name, filename, MAX_DIR_NAME - 1);
+                    (*current_dir)->num_entries++;
+                    disk_write(disk, (*current_dir)->start_block, (const char*)*current_dir);
+                } else {
+                    printf("Operazione annullata.\n");
                     return;
                 }
-                // Aggiorna la directory corrente
-                (*current_dir)->entries[(*current_dir)->num_entries].start_block = file->start_block;
-                (*current_dir)->entries[(*current_dir)->num_entries].is_directory = 0;
-                strncpy((*current_dir)->entries[(*current_dir)->num_entries].name, filename, MAX_DIR_NAME - 1);
-                (*current_dir)->num_entries++;
-                disk_write(disk, (*current_dir)->start_block, (const char*)*current_dir);
             } else {
                 // Riposiziona l'handle all'inizio del file
                 file->current_block = file->start_block;
@@ -177,33 +189,39 @@ void execute_command(char* input, Disk* disk, Directory** current_dir) {
                 file->size = 0; // Sovrascrivi il contenuto esistente
             }
 
-            // Modalità di inserimento testo
-            printf("Inserisci il testo per %s (termina con una linea contenente solo \":EOF\"):\n", filename);
-            char input_line[MAX_INPUT_SIZE];
-            char* text = NULL;
-            size_t total_size = 0;
+            if (arg_count == 3) {
+                // Se c'è un terzo argomento, lo usiamo come testo da scrivere
+                const char* text = args[2];
+                write_file(file, disk, text, strlen(text));
+            } else {
+                // Modalità di inserimento testo
+                printf("Inserisci il testo per %s (termina con una linea contenente solo \":EOF\"):\n", filename);
+                char input_line[MAX_INPUT_SIZE];
+                char* text = NULL;
+                size_t total_size = 0;
 
-            while (fgets(input_line, MAX_INPUT_SIZE, stdin)) {
-                if (strcmp(input_line, ":EOF\n") == 0) {
-                    break;
+                while (fgets(input_line, MAX_INPUT_SIZE, stdin)) {
+                    if (strcmp(input_line, ":EOF\n") == 0 || strcmp(input_line, ":EOF\r\n") == 0) {
+                        break;
+                    }
+                    size_t len = strlen(input_line);
+                    char* new_text = realloc(text, total_size + len + 1);
+                    if (new_text == NULL) {
+                        printf("Errore di memoria\n");
+                        free(text);
+                        break;
+                    }
+                    text = new_text;
+                    memcpy(text + total_size, input_line, len);
+                    total_size += len;
+                    text[total_size] = '\0';
                 }
-                size_t len = strlen(input_line);
-                char* new_text = realloc(text, total_size + len + 1);
-                if (new_text == NULL) {
-                    printf("Errore di memoria\n");
+
+                // Scrivi il testo nel file
+                if (text != NULL && total_size > 0) {
+                    write_file(file, disk, text, total_size);
                     free(text);
-                    break;
                 }
-                text = new_text;
-                memcpy(text + total_size, input_line, len);
-                total_size += len;
-                text[total_size] = '\0';
-            }
-
-            // Scrivi il testo nel file
-            if (text != NULL && total_size > 0) {
-                write_file(file, disk, text, total_size);
-                free(text);
             }
 
             free(file);
@@ -261,6 +279,19 @@ void execute_command(char* input, Disk* disk, Directory** current_dir) {
             free(buffer);
             free(file);
         }
+    } else if (strcmp(args[0], "help") == 0) {
+        // Comando help
+        printf("Elenco dei comandi disponibili:\n");
+        printf("ls                 - Elenca il contenuto della directory corrente\n");
+        printf("touch filename     - Crea un nuovo file\n");
+        printf("mkdir dirname      - Crea una nuova directory\n");
+        printf("cd dirname         - Cambia la directory corrente\n");
+        printf("rm filename        - Rimuove un file\n");
+        printf("rmdir dirname      - Rimuove una directory\n");
+        printf("write filename     - Scrive su un file\n");
+        printf("read filename      - Legge da un file\n");
+        printf("exit               - Esce dalla shell\n");
+        printf("help               - Mostra questo messaggio di aiuto\n");
     } else if (strcmp(args[0], "exit") == 0) {
         // Libera le risorse e termina
         disk_close(disk);

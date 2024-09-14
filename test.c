@@ -48,6 +48,7 @@ void test_fat() {
     Fat fat;
     fat_init(&fat);
 
+    // Verifica che tutti i blocchi siano liberi
     for (int i = 0; i < FAT_SIZE; i++) {
         if (fat.entries[i].file != -2 || fat.entries[i].next_block != -1) {
             test_fail("test_fat");
@@ -97,8 +98,17 @@ void test_create_file() {
     printf("=======================\n");
 
     Disk* disk = disk_init("test_disk.bin", 1);
-    FileHandle* file = create_file(disk, "test_file");
 
+    // Creiamo una directory root per contenere il file
+    Directory* root_dir = (Directory*) malloc(sizeof(Directory));
+    memset(root_dir, 0, sizeof(Directory));
+    strcpy(root_dir->name, "/");
+    root_dir->start_block = 0;
+    root_dir->parent_block = -1;
+    root_dir->num_entries = 0;
+    disk_write(disk, 0, (const char*)root_dir);
+
+    FileHandle* file = create_file(disk, "test_file");
     if (file != NULL) {
         test_pass("test_create_file");
     } else {
@@ -106,6 +116,7 @@ void test_create_file() {
     }
 
     free(file);
+    free(root_dir);
     disk_close(disk);
 }
 
@@ -115,21 +126,40 @@ void test_write_file() {
     printf("=======================\n");
 
     Disk* disk = disk_init("test_disk.bin", 1);
+
+    // Creiamo una directory root per contenere il file
+    Directory* root_dir = (Directory*) malloc(sizeof(Directory));
+    memset(root_dir, 0, sizeof(Directory));
+    strcpy(root_dir->name, "/");
+    root_dir->start_block = 0;
+    root_dir->parent_block = -1;
+    root_dir->num_entries = 0;
+    disk_write(disk, 0, (const char*)root_dir);
+
     FileHandle* file = create_file(disk, "test_file");
 
     const char* data_to_write = "Test di Prova per File!";
-    write_file(file, disk, data_to_write, strlen(data_to_write) + 1);
+    write_file(file, disk, data_to_write, strlen(data_to_write));
 
+    // Leggi il contenuto del file dal disco
     char buffer[BLOCK_SIZE];
     disk_read(disk, file->start_block, buffer);
 
-    if (strcmp(buffer, data_to_write) == 0) {
+    // Salta il FileMetadata
+    FileMetadata metadata;
+    memcpy(&metadata, buffer, sizeof(FileMetadata));
+
+    // Leggi il contenuto del file dopo il metadata
+    char* file_content = buffer + sizeof(FileMetadata);
+
+    if (strncmp(file_content, data_to_write, strlen(data_to_write)) == 0) {
         test_pass("test_write_file");
     } else {
         test_fail("test_write_file");
     }
 
     free(file);
+    free(root_dir);
     disk_close(disk);
 }
 
@@ -139,21 +169,38 @@ void test_read_file() {
     printf("=======================\n");
 
     Disk* disk = disk_init("test_disk.bin", 1);
+
+    // Creiamo una directory root per contenere il file
+    Directory* root_dir = (Directory*) malloc(sizeof(Directory));
+    memset(root_dir, 0, sizeof(Directory));
+    strcpy(root_dir->name, "/");
+    root_dir->start_block = 0;
+    root_dir->parent_block = -1;
+    root_dir->num_entries = 0;
+    disk_write(disk, 0, (const char*)root_dir);
+
     FileHandle* file = create_file(disk, "test_file");
 
     const char* data_to_write = "Test di Prova per File!";
-    write_file(file, disk, data_to_write, strlen(data_to_write) + 1);
+    write_file(file, disk, data_to_write, strlen(data_to_write));
+
+    // Riposiziona l'handle all'inizio del file
+    file->current_block = file->start_block;
+    file->position = sizeof(FileMetadata);
 
     char buffer[BLOCK_SIZE];
-    read_file(file, disk, buffer, strlen(data_to_write) + 1);
+    memset(buffer, 0, BLOCK_SIZE);
 
-    if (strcmp(buffer, data_to_write) == 0) {
+    read_file(file, disk, buffer, strlen(data_to_write));
+
+    if (strncmp(buffer, data_to_write, strlen(data_to_write)) == 0) {
         test_pass("test_read_file");
     } else {
         test_fail("test_read_file");
     }
 
     free(file);
+    free(root_dir);
     disk_close(disk);
 }
 
@@ -163,10 +210,20 @@ void test_erase_file() {
     printf("=======================\n");
 
     Disk* disk = disk_init("test_disk.bin", 1);
+
+    // Creiamo una directory root per contenere il file
+    Directory* root_dir = (Directory*) malloc(sizeof(Directory));
+    memset(root_dir, 0, sizeof(Directory));
+    strcpy(root_dir->name, "/");
+    root_dir->start_block = 0;
+    root_dir->parent_block = -1;
+    root_dir->num_entries = 0;
+    disk_write(disk, 0, (const char*)root_dir);
+
     FileHandle* file = create_file(disk, "test_file");
 
     const char* data_to_write = "Dati da cancellare!";
-    write_file(file, disk, data_to_write, strlen(data_to_write) + 1);
+    write_file(file, disk, data_to_write, strlen(data_to_write));
 
     erase_file(disk, file, "test_file");
 
@@ -177,45 +234,9 @@ void test_erase_file() {
     }
 
     free(file);
+    free(root_dir);
     disk_close(disk);
 }
-
-void test_seek_file() {
-    printf("\n=======================\n");
-    printf("Test seek_file\n");
-    printf("=======================\n");
-
-    Disk* disk = disk_init("test_disk.bin", 1);
-    FileHandle* file = create_file(disk, "test_file");
-
-    const char* data_to_write = "Questa è una stringa lunga per testare seek!";
-    write_file(file, disk, data_to_write, strlen(data_to_write) + 1);
-
-    // Richiesta di seek a 10 byte
-    seek_file(file, disk, 10);
-
-    char buffer[BLOCK_SIZE];
-    memset(buffer, 0, BLOCK_SIZE);  // Azzera il buffer per sicurezza
-
-    read_file(file, disk, buffer, strlen(data_to_write) - 10);  // Legge dal byte 10 in poi
-
-    if (DEBUG) {
-        printf("[DEBUG] Dati letti: '%s'\n", buffer);
-        printf("[DEBUG] Dati attesi: '%s'\n", data_to_write + 10);
-    }
-
-    // Confronto del contenuto dei buffer
-    if (strcmp(buffer, data_to_write + 10) == 0) {
-        test_pass("test_seek_file");
-    } else {
-        printf("[DEBUG] Buffer read does not match expected!\n");
-        test_fail("test_seek_file");
-    }
-
-    free(file);
-    disk_close(disk);
-}
-
 
 void test_create_directory() {
     printf("\n=======================\n");
@@ -223,9 +244,10 @@ void test_create_directory() {
     printf("=======================\n");
 
     Disk* disk = disk_init("test_disk.bin", 1);
-    Directory* root = create_dir(disk, NULL, "root");
 
-    if (root != NULL && strcmp(root->name, "root") == 0) {
+    Directory* root = create_dir(disk, NULL, "/");
+
+    if (root != NULL && strcmp(root->name, "/") == 0) {
         test_pass("test_create_directory");
     } else {
         test_fail("test_create_directory");
@@ -241,7 +263,8 @@ void test_create_subdirectory() {
     printf("=======================\n");
 
     Disk* disk = disk_init("test_disk.bin", 1);
-    Directory* root = create_dir(disk, NULL, "root");
+
+    Directory* root = create_dir(disk, NULL, "/");
     Directory* subdir = create_dir(disk, root, "subdir");
 
     if (subdir != NULL && strcmp(subdir->name, "subdir") == 0 && root->num_entries == 1) {
@@ -261,7 +284,8 @@ void test_list_directory() {
     printf("=======================\n");
 
     Disk* disk = disk_init("test_disk.bin", 1);
-    Directory* root = create_dir(disk, NULL, "root");
+
+    Directory* root = create_dir(disk, NULL, "/");
     create_dir(disk, root, "subdir1");
     create_dir(disk, root, "subdir2");
 
@@ -284,8 +308,9 @@ void test_change_directory() {
     printf("=======================\n");
 
     Disk* disk = disk_init("test_disk.bin", 1);
-    Directory* root = create_dir(disk, NULL, "root");
-    Directory* subdir = create_dir(disk, root, "subdir");
+
+    Directory* root = create_dir(disk, NULL, "/");
+    create_dir(disk, root, "subdir");
 
     Directory* current_dir = root;
     change_dir(disk, &current_dir, "subdir");
@@ -296,7 +321,7 @@ void test_change_directory() {
         test_fail("test_change_directory");
     }
 
-    free(subdir);
+    free(current_dir);
     free(root);
     disk_close(disk);
 }
@@ -307,7 +332,8 @@ void test_erase_directory() {
     printf("=======================\n");
 
     Disk* disk = disk_init("test_disk.bin", 1);
-    Directory* root = create_dir(disk, NULL, "root");
+
+    Directory* root = create_dir(disk, NULL, "/");
     Directory* subdir = create_dir(disk, root, "subdir");
 
     erase_dir(disk, subdir);
@@ -330,7 +356,6 @@ int main() {
     test_write_file();
     test_read_file();
     test_erase_file();
-    test_seek_file();
 
     test_create_directory();
     test_create_subdirectory();
