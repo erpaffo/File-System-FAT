@@ -20,7 +20,7 @@ int fat_get_free_block(Fat* fat) {
     if (DEBUG) {
         printf("[DEBUG] Ricerca del primo blocco libero\n");
     }
-    for (int i = 0; i < FAT_SIZE; i++) {  // Ora includiamo anche il blocco 0
+    for (int i = 0; i < FAT_SIZE; i++) {
         if (fat->entries[i].file == -2) {  // Verifica che il blocco sia libero
             if (DEBUG) {
                 printf("[DEBUG] Trovato blocco libero: %d\n", i);
@@ -94,7 +94,7 @@ int fat_get_next_block(Fat* fat, int block) {
 
 // Imposta il blocco successivo
 void fat_set_next_block(Fat* fat, int block, int next_block) {
-    if (block < 0 || block >= FAT_SIZE || next_block < 0 || next_block >= FAT_SIZE) {
+    if (block < 0 || block >= FAT_SIZE || (next_block != -1 && (next_block < 0 || next_block >= FAT_SIZE))) {
         printf("Errore: blocco non valido\n");
         return;
     }

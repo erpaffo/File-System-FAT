@@ -1,107 +1,81 @@
 #include "disk.h"
+#include "fat.h"
 
-// Inizializza il disco 
 Disk* disk_init(const char* filename, int format) {
-    // Apre file
-    if (DEBUG) {
-        printf("Opening file %s\n", filename);
-    }
-
-    int fd = open(filename, O_CREAT | O_RDWR, 0666);
+    // Apre il file del disco
+    int fd = open(filename, O_RDWR | O_CREAT, 0666);
     if (fd == -1) {
-        perror("Error opening file");
-        exit(EXIT_FAILURE);
+        perror("Errore nell'apertura del file del disco");
+        return NULL;
     }
 
-    // Imposta dimensione file
-    if (DEBUG) {
-        printf("Setting file size\n");
-    }
-    int ret = ftruncate(fd, DISK_SIZE);
-    if ( ret == -1) {
-        perror("Error setting file size");
+    // Imposta la dimensione del file del disco
+    if (lseek(fd, DISK_SIZE - 1, SEEK_SET) == -1) {
+        perror("Errore durante l'impostazione della dimensione del disco");
         close(fd);
-        exit(EXIT_FAILURE);
+        return NULL;
     }
-
-    // Mappa file in memoria
-    if (DEBUG) {
-        printf("Mapping file\n");
-    }
-    char* buffer = mmap(NULL, DISK_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-    if (buffer == MAP_FAILED) {
-        perror("Error mapping file");
+    if (write(fd, "", 1) != 1) {
+        perror("Errore durante la scrittura nel file del disco");
         close(fd);
-        exit(EXIT_FAILURE);
+        return NULL;
     }
-    if (DEBUG) {
-        printf("File mapped at address %p\n", buffer);
-        printf("Closing file\n");
-    }
-    close(fd);
 
-    Disk* disk = (Disk*) buffer;
-    
-    // Formatta disco se format = 1
+    // Mappa il file del disco in memoria
+    Disk* disk = (Disk*) mmap(NULL, DISK_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (disk == MAP_FAILED) {
+        perror("Errore durante la mappatura del disco in memoria");
+        close(fd);
+        return NULL;
+    }
+
+    close(fd); // Il file descriptor non è più necessario dopo la mappatura
+
+    // Se stiamo formattando, inizializziamo la FAT e i dati
     if (format) {
-        if (DEBUG) {
-            printf("Formatting disk\n");
-        }
         disk_format(disk);
-    }
-    if (DEBUG) {
-        printf("Disk initialized\n");
     }
 
     return disk;
 }
 
-// Formatta il disco (principalmente è un helper per disk_init)
 void disk_format(Disk* disk) {
-    memset(disk->data, 0, DISK_SIZE - sizeof(Disk));
     disk->size = DISK_SIZE;
 
-    // Imposta tutti i blocchi come liberi
-    for (int i = 0; i < FAT_SIZE; i++) {
-        disk->fat.entries[i].next_block = -1; 
-        disk->fat.entries[i].file = -2;       
-    }
+    // Inizializza la FAT
+    fat_init(&(disk->fat));
 
-    disk->fat.free_blocks = FAT_SIZE;
+    // Inizializza i dati del disco a zero
+    memset(disk->data, 0, DISK_SIZE - sizeof(Disk));
 
     if (DEBUG) {
-        printf("Disk formatted. Free blocks: %d\n", disk->fat.free_blocks);
+        printf("Disco formattato con successo.\n");
     }
 }
 
-// Legge un blocco dal disco
 void disk_read(Disk* disk, int block, char* buffer) {
-    if (block >= FAT_SIZE) {
-        perror("Error reading block: block exceeds FAT size");
-        exit(EXIT_FAILURE);
-    }
-
-    if (disk->fat.entries[block].file == -2) {
-        perror("Error reading block: block not used");
-        exit(EXIT_FAILURE);
+    if (block < 0 || block >= FAT_SIZE) {
+        printf("Errore: numero di blocco fuori dai limiti.\n");
+        return;
     }
 
     memcpy(buffer, disk->data + block * BLOCK_SIZE, BLOCK_SIZE);
 }
 
-// Scrive un blocco sul disco
+
 void disk_write(Disk* disk, int block, const char* buffer) {
-    if (block >= FAT_SIZE) {
-        perror("Error writing block: block exceeds FAT size");
-        exit(EXIT_FAILURE);
+    if (block < 0 || block >= FAT_SIZE) {
+        printf("Errore: numero di blocco fuori dai limiti.\n");
+        return;
     }
 
     memcpy(disk->data + block * BLOCK_SIZE, buffer, BLOCK_SIZE);
 
+    // Aggiorna la FAT se il blocco non era precedentemente in uso
     if (disk->fat.entries[block].file == -2) {
-        disk->fat.entries[block].file = 1;  
-        disk->fat.free_blocks--;  
-        
+        disk->fat.entries[block].file = 1;
+        disk->fat.free_blocks--;
+
         if (DEBUG) {
             printf("Blocco %d allocato. Blocchi liberi rimanenti: %d\n", block, disk->fat.free_blocks);
         }
@@ -110,9 +84,21 @@ void disk_write(Disk* disk, int block, const char* buffer) {
 
 // Chiude il disco liberando la memoria
 void disk_close(Disk* disk) {
-    int ret = munmap(disk, DISK_SIZE);
-    if (ret == -1) {
+    // Sincronizza le modifiche sul disco
+    if (msync(disk, DISK_SIZE, MS_SYNC) == -1) {
+        perror("Error syncing disk");
+    }
+
+    // Smunmap la memoria
+    if (munmap(disk, DISK_SIZE) == -1) {
         perror("Error unmapping file");
         exit(EXIT_FAILURE);
+    }
+}
+
+void disk_save_fat(Disk* disk) {
+    msync(&(disk->fat), sizeof(Fat), MS_SYNC);  // Sincronizza le modifiche della FAT sul disco
+    if (DEBUG) {
+        printf("FAT salvata correttamente.\n");
     }
 }

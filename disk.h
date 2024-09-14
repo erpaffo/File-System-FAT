@@ -9,26 +9,26 @@
 
 #define DEBUG 0
 
-#define DISK_SIZE 1024*1024 // 1MB
-#define BLOCK_SIZE 512 // 512B
-#define FAT_SIZE DISK_SIZE / BLOCK_SIZE
+#define DISK_SIZE (1024 * 1024) // 1MB
+#define BLOCK_SIZE 512          // 512B
+#define FAT_SIZE (DISK_SIZE / BLOCK_SIZE)
 
 // Struttura per entry nella FAT
 typedef struct {
     int next_block; // -1 per ultimo blocco
-    int file;       // -2 per blocco non usato
+    int file;       // -2 per blocco non usato, 1 per blocco in uso
 } FatEntry;
 
-// struttura File Allocation Table (FAT)
+// Struttura File Allocation Table (FAT)
 typedef struct {
-    int free_blocks; 
-    FatEntry entries[FAT_SIZE]; 
+    int free_blocks;
+    FatEntry entries[FAT_SIZE];
 } Fat;
 
 typedef struct {
-    int size;       // Dimensione disco
-    Fat fat;        // File Allocation Table per disco
-    char data[];    // Dati del disco
+    int size;       // Dimensione del disco
+    Fat fat;        // File Allocation Table per il disco
+    char data[];    // Dati del disco (mappati in memoria)
 } Disk;
 
 Disk* disk_init(const char* filename, int format);
@@ -36,3 +36,4 @@ void disk_format(Disk* disk);
 void disk_read(Disk* disk, int block, char* buffer);
 void disk_write(Disk* disk, int block, const char* buffer);
 void disk_close(Disk* disk);
+void disk_save_fat(Disk* disk);
