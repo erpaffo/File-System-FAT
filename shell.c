@@ -5,6 +5,9 @@
 #include "fat.h"
 #include "directory.h"
 #include "file.h"
+#include <readline/readline.h>
+#include <readline/history.h>
+
 
 #define MAX_INPUT_SIZE 1024
 #define MAX_ARGS 10
@@ -147,11 +150,10 @@ void execute_command(char* input, Disk* disk, Directory** current_dir) {
             }
         }
     } else if (strcmp(args[0], "write") == 0) {
-        if (arg_count < 3) {
-            printf("Usage: write filename \"text to write\"\n");
+        if (arg_count < 2) {
+            printf("Usage: write filename\n");
         } else {
             const char* filename = args[1];
-            const char* text = args[2];
 
             // Cerca se il file esiste
             FileHandle* file = open_file(disk, *current_dir, filename);
@@ -169,20 +171,41 @@ void execute_command(char* input, Disk* disk, Directory** current_dir) {
                 (*current_dir)->num_entries++;
                 disk_write(disk, (*current_dir)->start_block, (const char*)*current_dir);
             } else {
-                // Posizionati alla fine del file
+                // Riposiziona l'handle all'inizio del file
                 file->current_block = file->start_block;
-                file->position = sizeof(FileMetadata) + file->size;
-                // Trova l'ultimo blocco
-                int next_block;
-                while ((next_block = fat_get_next_block(&disk->fat, file->current_block)) != -1) {
-                    file->current_block = next_block;
+                file->position = sizeof(FileMetadata);
+                file->size = 0; // Sovrascrivi il contenuto esistente
+            }
+
+            // Modalità di inserimento testo
+            printf("Inserisci il testo per %s (termina con una linea contenente solo \":EOF\"):\n", filename);
+            char input_line[MAX_INPUT_SIZE];
+            char* text = NULL;
+            size_t total_size = 0;
+
+            while (fgets(input_line, MAX_INPUT_SIZE, stdin)) {
+                if (strcmp(input_line, ":EOF\n") == 0) {
+                    break;
                 }
+                size_t len = strlen(input_line);
+                char* new_text = realloc(text, total_size + len + 1);
+                if (new_text == NULL) {
+                    printf("Errore di memoria\n");
+                    free(text);
+                    break;
+                }
+                text = new_text;
+                memcpy(text + total_size, input_line, len);
+                total_size += len;
+                text[total_size] = '\0';
             }
 
             // Scrivi il testo nel file
-            write_file(file, disk, text, strlen(text));
+            if (text != NULL && total_size > 0) {
+                write_file(file, disk, text, total_size);
+                free(text);
+            }
 
-            // Libera il file handle
             free(file);
         }
     } else if (strcmp(args[0], "read") == 0) {
@@ -214,8 +237,25 @@ void execute_command(char* input, Disk* disk, Directory** current_dir) {
 
             read_file(file, disk, buffer, file->size);
 
-            // Mostra il contenuto
-            printf("Contenuto di %s:\n%s\n", filename, buffer);
+            // Implementa la paginazione
+            const int lines_per_page = 20;
+            char* line = strtok(buffer, "\n");
+            int line_count = 0;
+
+            while (line != NULL) {
+                printf("%s\n", line);
+                line_count++;
+
+                if (line_count % lines_per_page == 0) {
+                    printf("-- Premere Invio per continuare, 'q' per uscire --\n");
+                    int c = getchar();
+                    if (c == 'q') {
+                        break;
+                    }
+                }
+
+                line = strtok(NULL, "\n");
+            }
 
             // Libera le risorse
             free(buffer);
@@ -266,17 +306,26 @@ int main() {
 
     Directory* current_dir = root_dir;
 
-    char input[MAX_INPUT_SIZE];
-
     while (1) {
-        prompt(current_dir);
-        if (fgets(input, MAX_INPUT_SIZE, stdin) == NULL) {
-            break; // EOF
+        // Crea il prompt con il nome della directory corrente
+        char prompt_str[MAX_DIR_NAME + 4];
+        snprintf(prompt_str, sizeof(prompt_str), "%s> ", current_dir->name);
+
+        // Usa readline per leggere l'input dell'utente con il prompt personalizzato
+        char* input = readline(prompt_str);
+
+        if (input == NULL) {
+            break; // EOF (Ctrl+D)
         }
 
-        input[strcspn(input, "\n")] = 0;
+        // Aggiungi il comando alla cronologia se non è vuoto
+        if (strlen(input) > 0) {
+            add_history(input);
+        }
 
         execute_command(input, disk, &current_dir);
+
+        free(input); // Libera la memoria allocata da readline
     }
 
     free(root_dir);
