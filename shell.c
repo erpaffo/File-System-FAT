@@ -276,6 +276,8 @@ void execute_command(char* input, Disk* disk, Directory** current_dir, const cha
         printf("rmdir dirname      - Rimuove una directory\n");
         printf("write filename     - Scrive su un file\n");
         printf("read filename      - Legge da un file\n");
+        printf("memory num_blocks  - Mostra lo stato dei blocchi di memoria del disco\n");
+        printf("clear              - Pulisce lo schermo della shell\n");
         printf("exit               - Esce dalla shell\n");
         printf("help               - Mostra questo messaggio di aiuto\n");
     } else if (strcmp(args[0], "exit") == 0 || strcmp(args[0], "quit") == 0) {
@@ -294,6 +296,77 @@ void execute_command(char* input, Disk* disk, Directory** current_dir, const cha
         }
         disk_close(disk);
         exit(0);
+    } else if (strcmp(args[0], "memory") == 0) {
+        if (arg_count < 2) {
+            printf("Usage: memory num_blocks\n");
+        } else {
+            int num_blocks = atoi(args[1]);  
+            if (num_blocks <= 0) {
+                printf("Errore: numero di blocchi non valido\n");
+            } else {
+                FILE *file = fopen("memory.txt", "w");
+                if (!file) {
+                    printf("Errore: impossibile creare il file memory.txt\n");
+                    return;
+                }
+
+                int blocks_per_row = 8; 
+                int blocks_to_print = (num_blocks < FAT_SIZE) ? num_blocks : FAT_SIZE; 
+
+                for (int r = 0; r < (blocks_to_print + blocks_per_row - 1) / blocks_per_row; r++) {
+                    fprintf(file, "+----------");
+                    for (int j = 0; j < blocks_per_row && r * blocks_per_row + j < blocks_to_print; j++) {
+                        fprintf(file, "+----------");
+                    }
+                    fprintf(file, "+\n|");
+
+                    for (int j = 0; j < blocks_per_row && r * blocks_per_row + j < blocks_to_print; j++) {
+                        int block_num = r * blocks_per_row + j;
+                        fprintf(file, " Block %3d |", block_num);
+                    }
+                    fprintf(file, "\n+----------");
+                    for (int j = 0; j < blocks_per_row && r * blocks_per_row + j < blocks_to_print; j++) {
+                        fprintf(file, "+----------");
+                    }
+                    fprintf(file, "+\n|");
+
+                    for (int j = 0; j < blocks_per_row && r * blocks_per_row + j < blocks_to_print; j++) {
+                        int block_num = r * blocks_per_row + j;
+                        if (disk->fat.entries[block_num].file == -2) {
+                            fprintf(file, "   Free    |");
+                        } else {
+                            fprintf(file, "  Blocked  |");
+                        }
+                    }
+                    fprintf(file, "\n+----------");
+                    for (int j = 0; j < blocks_per_row && r * blocks_per_row + j < blocks_to_print; j++) {
+                        fprintf(file, "+----------");
+                    }
+                    fprintf(file, "+\n|");
+
+                    for (int j = 0; j < blocks_per_row && r * blocks_per_row + j < blocks_to_print; j++) {
+                        int block_num = r * blocks_per_row + j;
+                        if (disk->fat.entries[block_num].next_block == -1) {
+                            fprintf(file, "  Next:-1  |");
+                        } else {
+                            fprintf(file, " Next:%3d  |", disk->fat.entries[block_num].next_block);
+                        }
+                    }
+                    fprintf(file, "\n");
+                }
+
+                fprintf(file, "+----------");
+                for (int j = 0; j < blocks_per_row && j < blocks_to_print; j++) {
+                    fprintf(file, "+----------");
+                }
+                fprintf(file, "+\n");
+                fclose(file);
+
+                printf("Lo stato della memoria è stato scritto in memory.txt\n");
+            }
+        }
+    } else if (strcmp(args[0], "clear") == 0) {
+        system("clear");
     } else {
         printf("Comando non riconosciuto: %s\n", args[0]);
     }
