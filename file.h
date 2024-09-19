@@ -4,17 +4,19 @@
 #include "fat.h"
 #include "directory.h"
 
-// Struttura per gestire i file utilizzata per contenere la posizione del file
 typedef struct {
-    int start_block;
-    int current_block;
-    int position;
-    int size;
-} FileHandle;
+    char name[MAX_FILENAME_LENGTH]; // Nome del file o della directory
+    int start_block;                // Blocco iniziale sul disco
+    int size;                       // Dimensione in byte (0 per directory)
+    int is_directory;               // 1 se è una directory, 0 se è un file
+} FileControlBlock;
 
+// Struttura per gestire i file aperti
 typedef struct {
-    int size; // Dimensione del file
-} FileMetadata;
+    FileControlBlock fcb;  // FCB associato al file
+    int current_block;     // Blocco corrente durante le operazioni di I/O
+    int position;          // Posizione corrente nel file
+} FileHandle;
 
 FileHandle* create_file(Disk* disk, const char* filename);
 void write_file(FileHandle* handle, Disk* disk, const void* buffer, int size);

@@ -3,3 +3,7 @@
 #define DISK_SIZE (1024 * 1024)// 1MB
 #define BLOCK_SIZE 512          // 512B
 #define FAT_SIZE (DISK_SIZE / BLOCK_SIZE)
+
+#define MAX_FILENAME_LENGTH 100
+
+#define MAX_DIR_ENTRIES 20

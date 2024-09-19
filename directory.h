@@ -3,23 +3,11 @@
 #include "disk.h"
 #include "fat.h"
 
-#define MAX_DIR_NAME 100
-#define MAX_FILES_PER_DIR 20
-
-// Elemento della directory (file o subdirectory)
+// Struttura per la directory
 typedef struct {
-    char name[MAX_DIR_NAME];
-    int start_block;
-    int is_directory;  // 1 se è una directory, 0 se è un file
-} DirEntry;
-
-// Struttura per directory
-typedef struct {
-    char name[MAX_DIR_NAME];
-    int start_block;
-    int parent_block;
-    int num_entries;
-    DirEntry entries[MAX_FILES_PER_DIR];  
+    FileControlBlock fcb;              // FCB della directory stessa
+    int num_entries;                   // Numero di entries nella directory
+    FileControlBlock entries[MAX_DIR_ENTRIES]; // Array di FCB dell'entry (file o directory)
 } Directory;
 
 Directory* create_dir(Disk* disk, Directory* parent, const char* dirname);
