@@ -53,6 +53,7 @@ void disk_format(Disk* disk) {
     }
 }
 
+// Legge un blocco dal disco
 void disk_read(Disk* disk, int block, char* buffer) {
     if (block < 0 || block >= FAT_SIZE) {
         printf("Errore: numero di blocco fuori dai limiti.\n");
@@ -62,7 +63,7 @@ void disk_read(Disk* disk, int block, char* buffer) {
     memcpy(buffer, disk->data + block * BLOCK_SIZE, BLOCK_SIZE);
 }
 
-
+// Scrive un blocco nel disco
 void disk_write(Disk* disk, int block, const char* buffer) {
     if (block < 0 || block >= FAT_SIZE) {
         printf("Errore: numero di blocco fuori dai limiti.\n");
@@ -70,19 +71,9 @@ void disk_write(Disk* disk, int block, const char* buffer) {
     }
 
     memcpy(disk->data + block * BLOCK_SIZE, buffer, BLOCK_SIZE);
-
-    // Aggiorna la FAT se il blocco non era precedentemente in uso
-    if (disk->fat.entries[block].file == -2) {
-        disk->fat.entries[block].file = 1;
-        disk->fat.free_blocks--;
-
-        if (DEBUG) {
-            printf("Blocco %d allocato. Blocchi liberi rimanenti: %d\n", block, disk->fat.free_blocks);
-        }
-    }
 }
 
-// Chiude il disco liberando la memoria
+// Chiude il disco e sincronizza i dati
 void disk_close(Disk* disk) {
     // Sincronizza le modifiche sul disco
     if (msync(disk, DISK_SIZE, MS_SYNC) == -1) {
@@ -96,6 +87,7 @@ void disk_close(Disk* disk) {
     }
 }
 
+// Salva lo stato della FAT
 void disk_save_fat(Disk* disk) {
     msync(&(disk->fat), sizeof(Fat), MS_SYNC);  // Sincronizza le modifiche della FAT sul disco
     if (DEBUG) {
