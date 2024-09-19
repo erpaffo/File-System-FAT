@@ -6,22 +6,18 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/mman.h>
-
-#define DEBUG 0
-
-#define DISK_SIZE (1024 * 1024)// 1MB
-#define BLOCK_SIZE 512          // 512B
-#define FAT_SIZE (DISK_SIZE / BLOCK_SIZE)
+#include "settings.h"
 
 // Struttura per entry nella FAT
 typedef struct {
     int next_block; // -1 per ultimo blocco
     int file;       // -2 per blocco non usato, 1 per blocco in uso
+    int next_free_block; //indice del prossimo blocco libero
 } FatEntry;
 
 // Struttura File Allocation Table (FAT)
 typedef struct {
-    int free_blocks;
+    int free_block_idx; // Indice del primo blocco libero
     FatEntry entries[FAT_SIZE];
 } Fat;
 
