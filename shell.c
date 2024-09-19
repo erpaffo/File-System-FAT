@@ -403,15 +403,23 @@ int main() {
         return 1;
     }
 
-    Disk* disk = disk_init(temp_disk_filename, format);
+       Disk* disk = disk_init(temp_disk_filename, format);
+    if (disk == NULL) {
+        printf("Errore nell'inizializzazione del disco.\n");
+        return 1;
+    }
 
     Directory* root_dir = (Directory*) malloc(sizeof(Directory));
+    if (root_dir == NULL) {
+        printf("Errore di allocazione della memoria per la directory root.\n");
+        disk_close(disk);
+        return 1;
+    }
 
     if (format) {
-        disk->fat.entries[0].file = 1;
-        disk->fat.entries[0].next_block = -1;
-        disk->fat.free_blocks--;
+        disk_format(disk); // Include l'inizializzazione della FAT e la marcatura del blocco 0
 
+        // Inizializza la directory root
         memset(root_dir, 0, sizeof(Directory));
         strncpy(root_dir->name, "/", MAX_DIR_NAME - 1);
         root_dir->name[MAX_DIR_NAME - 1] = '\0';
@@ -419,7 +427,8 @@ int main() {
         root_dir->parent_block = -1;
         root_dir->num_entries = 0;
 
-        disk_write(disk, 0, (const char*) root_dir);
+        // Scrive la directory root sul blocco 0
+        disk_write(disk, 0, (const char*)root_dir);
         disk_save_fat(disk);
 
         if (DEBUG) {
