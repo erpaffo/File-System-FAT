@@ -1,4 +1,8 @@
+// file.c
 #include "file.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 // Crea file
 FileHandle* create_file(Disk *disk, const char* filename) {
@@ -10,26 +14,33 @@ FileHandle* create_file(Disk *disk, const char* filename) {
 
     // Inizializza il FileHandle
     FileHandle* handle = (FileHandle*) malloc(sizeof(FileHandle));
-    handle->start_block = free_block;
+    if (handle == NULL) {
+        printf("Errore di allocazione memoria per FileHandle\n");
+        fat_free_block(&disk->fat, free_block);
+        return NULL;
+    }
+
+    memset(handle, 0, sizeof(FileHandle));
+    strncpy(handle->fcb.name, filename, MAX_FILENAME_LENGTH - 1);
+    handle->fcb.name[MAX_FILENAME_LENGTH - 1] = '\0';
+    handle->fcb.start_block = free_block;
+    handle->fcb.size = 0;
+    handle->fcb.is_directory = 0;
     handle->current_block = free_block;
-    handle->position = sizeof(FileMetadata); // Posizione dopo il metadata
-    handle->size = 0;
+    handle->position = 0;
 
     if (DEBUG) {
         printf("Creazione file %s. Primo blocco: %d\n", filename, free_block);
     }
 
-    // Inizializza e scrivi il FileMetadata sul disco
-    FileMetadata metadata;
-    metadata.size = 0;
+    // Inizializza e scrivi il FileControlBlock sul disco
     char block_data[BLOCK_SIZE];
     memset(block_data, 0, BLOCK_SIZE);
-    memcpy(block_data, &metadata, sizeof(FileMetadata));
+    memcpy(block_data, &handle->fcb, sizeof(FileControlBlock));
     disk_write(disk, free_block, block_data);
 
     return handle;
 }
-
 
 // Scrive su file
 void write_file(FileHandle* handle, Disk* disk, const void* buffer, int size) {
@@ -72,15 +83,13 @@ void write_file(FileHandle* handle, Disk* disk, const void* buffer, int size) {
 
     handle->current_block = block;
     handle->position = position;
-    handle->size += size;
+    handle->fcb.size += size;
 
-    // Aggiorna il FileMetadata sul disco
-    FileMetadata metadata;
-    metadata.size = handle->size;
+    // Aggiorna il FileControlBlock sul disco
     char block_data[BLOCK_SIZE];
-    disk_read(disk, handle->start_block, block_data);
-    memcpy(block_data, &metadata, sizeof(FileMetadata));
-    disk_write(disk, handle->start_block, block_data);
+    disk_read(disk, handle->fcb.start_block, block_data);
+    memcpy(block_data, &handle->fcb, sizeof(FileControlBlock));
+    disk_write(disk, handle->fcb.start_block, block_data);
 }
 
 // Legge da file
@@ -90,8 +99,8 @@ void read_file(FileHandle* handle, Disk* disk, void* buffer, int size) {
     int read_bytes = 0;
 
     // Limita la lettura alla dimensione del file
-    if (size > handle->size - (handle->position - sizeof(FileMetadata))) {
-        size = handle->size - (handle->position - sizeof(FileMetadata));
+    if (size > handle->fcb.size - handle->position) {
+        size = handle->fcb.size - handle->position;
     }
 
     while (read_bytes < size) {
@@ -122,7 +131,7 @@ void read_file(FileHandle* handle, Disk* disk, void* buffer, int size) {
 
 // Cancella file
 void erase_file(Disk* disk, FileHandle* handle, const char* filename) {
-    int current_block = handle->start_block;
+    int current_block = handle->fcb.start_block;
     while (current_block != -1 && current_block >= 0) {
         int next_block = fat_get_next_block(&disk->fat, current_block);
         fat_free_block(&disk->fat, current_block);
@@ -131,18 +140,18 @@ void erase_file(Disk* disk, FileHandle* handle, const char* filename) {
 }
 
 // Sposta all'offset specificato
-void seek_file(FileHandle* handle, Disk* disk, int offset) {
-    if (offset > handle->size) {
+void seek_file(FileHandle* handle, Disk *disk, int offset) {
+    if (offset > handle->fcb.size) {
         printf("Errore: offset supera la dimensione del file\n");
         return;
     }
 
-    int current_block = handle->start_block;
+    int current_block = handle->fcb.start_block;
     int current_offset = 0;
 
-        if (DEBUG) {
+    if (DEBUG) {
         printf("[DEBUG] Seek richiesto all'offset: %d\n", offset);
-        printf("[DEBUG] Dimensione file: %d\n", handle->size);
+        printf("[DEBUG] Dimensione file: %d\n", handle->fcb.size);
         printf("[DEBUG] Blocco iniziale: %d\n", current_block);
     }
 
@@ -154,7 +163,6 @@ void seek_file(FileHandle* handle, Disk* disk, int offset) {
             return;
         }
         current_offset += BLOCK_SIZE;
-
 
         if (DEBUG) {
             printf("[DEBUG] Spostato al blocco successivo: %d\n", current_block);
@@ -179,19 +187,24 @@ FileHandle* open_file(Disk* disk, Directory* dir, const char* filename) {
     for (int i = 0; i < dir->num_entries; i++) {
         if (!dir->entries[i].is_directory && strcmp(dir->entries[i].name, filename) == 0) {
             FileHandle* handle = (FileHandle*) malloc(sizeof(FileHandle));
-            handle->start_block = dir->entries[i].start_block;
-            handle->current_block = handle->start_block;
-            handle->position = sizeof(FileMetadata);
+            if (handle == NULL) {
+                printf("Errore di allocazione memoria per FileHandle\n");
+                return NULL;
+            }
 
-            // Leggi il FileMetadata
-            char block_data[BLOCK_SIZE];
-            disk_read(disk, handle->start_block, block_data);
-            FileMetadata metadata;
-            memcpy(&metadata, block_data, sizeof(FileMetadata));
-            handle->size = metadata.size;
+            handle->fcb = dir->entries[i];
+            handle->current_block = handle->fcb.start_block;
+            handle->position = 0; // Iniziare dalla posizione 0
 
             return handle;
         }
     }
     return NULL;
 }
+
+void close_file(FileHandle* handle) {
+    if (handle != NULL) {
+        free(handle);
+    }
+}
+

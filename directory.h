@@ -2,13 +2,7 @@
 
 #include "disk.h"
 #include "fat.h"
-
-// Struttura per la directory
-typedef struct {
-    FileControlBlock fcb;              // FCB della directory stessa
-    int num_entries;                   // Numero di entries nella directory
-    FileControlBlock entries[MAX_DIR_ENTRIES]; // Array di FCB dell'entry (file o directory)
-} Directory;
+#include "file.h"
 
 Directory* create_dir(Disk* disk, Directory* parent, const char* dirname);
 void erase_dir(Disk* disk, Directory* dir);

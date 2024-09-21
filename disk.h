@@ -6,26 +6,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/mman.h>
-#include "settings.h"
-
-// Struttura per entry nella FAT
-typedef struct {
-    int next_block; // -1 per ultimo blocco
-    int file;       // -2 per blocco non usato, 1 per blocco in uso
-    int next_free_block; //indice del prossimo blocco libero
-} FatEntry;
-
-// Struttura File Allocation Table (FAT)
-typedef struct {
-    int free_block_idx; // Indice del primo blocco libero
-    FatEntry entries[FAT_SIZE];
-} Fat;
-
-typedef struct {
-    int size;       // Dimensione del disco
-    Fat fat;        // File Allocation Table per il disco
-    char data[];    // Dati del disco (mappati in memoria)
-} Disk;
+#include "structures.h"
 
 Disk* disk_init(const char* filename, int format);
 void disk_format(Disk* disk);

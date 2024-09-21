@@ -12,7 +12,7 @@
 #define MAX_ARGS 10
 
 void prompt(Directory* current_dir) {
-    printf("%s> ", current_dir->name);
+    printf("%s> ", current_dir->fcb.name);
 }
 
 int parse_input(char* input, char* args[]) {
@@ -66,21 +66,23 @@ void execute_command(char* input, Disk* disk, Directory** current_dir, const cha
             printf("Usage: touch filename\n");
         } else {
             const char* filename = args[1];
+            int exists = 0;
             for (int i = 0; i < (*current_dir)->num_entries; i++) {
                 if (strcmp((*current_dir)->entries[i].name, filename) == 0) {
                     printf("Il file '%s' esiste già.\n", filename);
-                    return;
+                    exists = 1;
+                    break;
                 }
             }
-            FileHandle* file = create_file(disk, filename);
-            if (file != NULL) {
-                (*current_dir)->entries[(*current_dir)->num_entries].start_block = file->start_block;
-                (*current_dir)->entries[(*current_dir)->num_entries].is_directory = 0;
-                strncpy((*current_dir)->entries[(*current_dir)->num_entries].name, filename, MAX_DIR_NAME - 1);
-                (*current_dir)->num_entries++;
-                disk_write(disk, (*current_dir)->start_block, (const char*)*current_dir);
-                disk_save_fat(disk); // Salva la FAT
-                free(file);
+            if (!exists) {
+                FileHandle* file = create_file(disk, filename);
+                if (file != NULL) {
+                    (*current_dir)->entries[(*current_dir)->num_entries] = file->fcb;
+                    (*current_dir)->num_entries++;
+                    disk_write(disk, (*current_dir)->fcb.start_block, (const char*)*current_dir);
+                    disk_save_fat(disk); // Salva la FAT
+                    free(file);
+                }
             }
         }
     } else if (strcmp(args[0], "mkdir") == 0) {
@@ -88,6 +90,7 @@ void execute_command(char* input, Disk* disk, Directory** current_dir, const cha
             printf("Usage: mkdir dirname\n");
         } else {
             create_dir(disk, *current_dir, args[1]);
+            disk_write(disk, (*current_dir)->fcb.start_block, (const char*)*current_dir);
             disk_save_fat(disk); // Salva la FAT
         }
     } else if (strcmp(args[0], "cd") == 0) {
@@ -96,6 +99,10 @@ void execute_command(char* input, Disk* disk, Directory** current_dir, const cha
         } else if (strcmp(args[1], "..") == 0) {
             if ((*current_dir)->parent_block != -1) {
                 Directory* parent_dir = (Directory*) malloc(sizeof(Directory));
+                if (parent_dir == NULL) {
+                    printf("Errore di allocazione memoria per Directory\n");
+                    return;
+                }
                 disk_read(disk, (*current_dir)->parent_block, (char*) parent_dir);
                 *current_dir = parent_dir;
             } else {
@@ -112,13 +119,14 @@ void execute_command(char* input, Disk* disk, Directory** current_dir, const cha
             for (int i = 0; i < (*current_dir)->num_entries; i++) {
                 if (!(*current_dir)->entries[i].is_directory && strcmp((*current_dir)->entries[i].name, args[1]) == 0) {
                     FileHandle handle;
-                    handle.start_block = (*current_dir)->entries[i].start_block;
+                    handle.fcb = (*current_dir)->entries[i];
                     erase_file(disk, &handle, args[1]);
+                    // Rimuovi l'entry dalla directory
                     for (int j = i; j < (*current_dir)->num_entries - 1; j++) {
                         (*current_dir)->entries[j] = (*current_dir)->entries[j + 1];
                     }
                     (*current_dir)->num_entries--;
-                    disk_write(disk, (*current_dir)->start_block, (const char*)*current_dir);
+                    disk_write(disk, (*current_dir)->parent_block, (const char*)*current_dir);
                     disk_save_fat(disk); // Salva la FAT
                     found = 1;
                     break;
@@ -138,11 +146,12 @@ void execute_command(char* input, Disk* disk, Directory** current_dir, const cha
                     Directory dir_to_delete;
                     disk_read(disk, (*current_dir)->entries[i].start_block, (char*)&dir_to_delete);
                     erase_dir(disk, &dir_to_delete);
+                    // Rimuovi l'entry dalla directory
                     for (int j = i; j < (*current_dir)->num_entries - 1; j++) {
                         (*current_dir)->entries[j] = (*current_dir)->entries[j + 1];
                     }
                     (*current_dir)->num_entries--;
-                    disk_write(disk, (*current_dir)->start_block, (const char*)*current_dir);
+                    disk_write(disk, (*current_dir)->fcb.start_block, (const char*)*current_dir);
                     disk_save_fat(disk); // Salva la FAT
                     found = 1;
                     break;
@@ -170,55 +179,59 @@ void execute_command(char* input, Disk* disk, Directory** current_dir, const cha
                         printf("Errore nella creazione del file\n");
                         return;
                     }
-                    (*current_dir)->entries[(*current_dir)->num_entries].start_block = file->start_block;
-                    (*current_dir)->entries[(*current_dir)->num_entries].is_directory = 0;
-                    strncpy((*current_dir)->entries[(*current_dir)->num_entries].name, filename, MAX_DIR_NAME - 1);
+                    (*current_dir)->entries[(*current_dir)->num_entries] = file->fcb;
                     (*current_dir)->num_entries++;
-                    disk_write(disk, (*current_dir)->start_block, (const char*)*current_dir);
+                    disk_write(disk, (*current_dir)->fcb.start_block, (const char*)*current_dir);
                     disk_save_fat(disk); // Salva la FAT
                 } else {
                     printf("Operazione annullata.\n");
                     return;
                 }
-            } else {
-                file->current_block = file->start_block;
-                file->position = sizeof(FileMetadata);
-                file->size = 0;
             }
 
-            if (arg_count == 3) {
-                const char* text = args[2];
-                write_file(file, disk, text, strlen(text));
-            } else {
-                printf("Inserisci il testo per %s (termina con una linea contenente solo \":EOF\"):\n", filename);
-                char input_line[MAX_INPUT_SIZE];
-                char* text = NULL;
-                size_t total_size = 0;
+            if (file != NULL) {
+                if (arg_count == 3) {
+                    const char* text = args[2];
+                    write_file(file, disk, text, strlen(text));
+                } else {
+                    printf("Inserisci il testo per %s (termina con una linea contenente solo \":EOF\"):\n", filename);
+                    char input_line[MAX_INPUT_SIZE];
+                    char* text = NULL;
+                    size_t total_size = 0;
 
-                while (fgets(input_line, MAX_INPUT_SIZE, stdin)) {
-                    if (strcmp(input_line, ":EOF\n") == 0 || strcmp(input_line, ":EOF\r\n") == 0) {
-                        break;
+                    while (fgets(input_line, MAX_INPUT_SIZE, stdin)) {
+                        if (strcmp(input_line, ":EOF\n") == 0 || strcmp(input_line, ":EOF\r\n") == 0) {
+                            break;
+                        }
+                        size_t len = strlen(input_line);
+                        char* new_text = realloc(text, total_size + len);
+                        if (new_text == NULL) {
+                            printf("Errore di memoria\n");
+                            free(text);
+                            break;
+                        }
+                        text = new_text;
+                        memcpy(text + total_size, input_line, len);
+                        total_size += len;
                     }
-                    size_t len = strlen(input_line);
-                    char* new_text = realloc(text, total_size + len + 1);
-                    if (new_text == NULL) {
-                        printf("Errore di memoria\n");
+
+                    if (text != NULL && total_size > 0) {
+                        write_file(file, disk, text, total_size);
                         free(text);
+                    }
+                }
+
+                // Aggiorna l'entry nella directory
+                for (int i = 0; i < (*current_dir)->num_entries; i++) {
+                    if (strcmp((*current_dir)->entries[i].name, filename) == 0) {
+                        (*current_dir)->entries[i] = file->fcb;
                         break;
                     }
-                    text = new_text;
-                    memcpy(text + total_size, input_line, len);
-                    total_size += len;
-                    text[total_size] = '\0';
                 }
-
-                if (text != NULL && total_size > 0) {
-                    write_file(file, disk, text, total_size);
-                    free(text);
-                }
+                disk_write(disk, (*current_dir)->fcb.start_block, (const char*)*current_dir);
+                disk_save_fat(disk); // Salva la FAT
+                free(file);
             }
-
-            free(file);
         }
     } else if (strcmp(args[0], "read") == 0) {
         if (arg_count < 2) {
@@ -231,18 +244,23 @@ void execute_command(char* input, Disk* disk, Directory** current_dir, const cha
                 return;
             }
 
-            if (file->size == 0) {
+            if (file->fcb.size == 0) {
                 printf("Il file è vuoto.\n");
                 free(file);
                 return;
             }
 
-            file->current_block = file->start_block;
-            file->position = sizeof(FileMetadata);
+            file->current_block = file->fcb.start_block;
+            file->position = 0;
 
-            char* buffer = (char*) malloc(file->size + 1);
-            memset(buffer, 0, file->size + 1);
-            read_file(file, disk, buffer, file->size);
+            char* buffer = (char*) malloc(file->fcb.size + 1);
+            if (buffer == NULL) {
+                printf("Errore di allocazione memoria per il buffer di lettura\n");
+                free(file);
+                return;
+            }
+            memset(buffer, 0, file->fcb.size + 1);
+            read_file(file, disk, buffer, file->fcb.size);
 
             const int lines_per_page = 20;
             char* line = strtok(buffer, "\n");
@@ -314,7 +332,6 @@ void execute_command(char* input, Disk* disk, Directory** current_dir, const cha
                 int blocks_to_print = (num_blocks < FAT_SIZE) ? num_blocks : FAT_SIZE; 
 
                 for (int r = 0; r < (blocks_to_print + blocks_per_row - 1) / blocks_per_row; r++) {
-                    fprintf(file, "+----------");
                     for (int j = 0; j < blocks_per_row && r * blocks_per_row + j < blocks_to_print; j++) {
                         fprintf(file, "+----------");
                     }
@@ -325,6 +342,7 @@ void execute_command(char* input, Disk* disk, Directory** current_dir, const cha
                         fprintf(file, " Block %3d |", block_num);
                     }
                     fprintf(file, "\n+----------");
+
                     for (int j = 0; j < blocks_per_row && r * blocks_per_row + j < blocks_to_print; j++) {
                         fprintf(file, "+----------");
                     }
@@ -332,13 +350,14 @@ void execute_command(char* input, Disk* disk, Directory** current_dir, const cha
 
                     for (int j = 0; j < blocks_per_row && r * blocks_per_row + j < blocks_to_print; j++) {
                         int block_num = r * blocks_per_row + j;
-                        if (disk->fat.entries[block_num].file == -2) {
+                        if (disk->fat.entries[block_num].next_block == -2) { // Supponendo -2 rappresenti Free
                             fprintf(file, "   Free    |");
                         } else {
                             fprintf(file, "  Blocked  |");
                         }
                     }
                     fprintf(file, "\n+----------");
+
                     for (int j = 0; j < blocks_per_row && r * blocks_per_row + j < blocks_to_print; j++) {
                         fprintf(file, "+----------");
                     }
@@ -376,7 +395,10 @@ int main() {
     char disk_filename[256];
 
     printf("Inserisci il nome o il percorso del disco da aprire: ");
-    fgets(disk_filename, sizeof(disk_filename), stdin);
+    if (fgets(disk_filename, sizeof(disk_filename), stdin) == NULL) {
+        printf("Errore nella lettura del nome del disco.\n");
+        return 1;
+    }
     disk_filename[strcspn(disk_filename, "\n")] = 0;
 
     char temp_disk_filename[260];
@@ -403,7 +425,7 @@ int main() {
         return 1;
     }
 
-       Disk* disk = disk_init(temp_disk_filename, format);
+    Disk* disk = disk_init(temp_disk_filename, format);
     if (disk == NULL) {
         printf("Errore nell'inizializzazione del disco.\n");
         return 1;
@@ -421,28 +443,33 @@ int main() {
 
         // Inizializza la directory root
         memset(root_dir, 0, sizeof(Directory));
-        strncpy(root_dir->name, "/", MAX_DIR_NAME - 1);
-        root_dir->name[MAX_DIR_NAME - 1] = '\0';
-        root_dir->start_block = 0;
+        strncpy(root_dir->fcb.name, "/", MAX_FILENAME_LENGTH - 1);
+        root_dir->fcb.name[MAX_FILENAME_LENGTH - 1] = '\0';
+        root_dir->fcb.start_block = fat_alloc_block(&disk->fat); // Assegna un blocco per root
+        root_dir->fcb.size = 0;
+        root_dir->fcb.is_directory = 1;
         root_dir->parent_block = -1;
         root_dir->num_entries = 0;
 
-        // Scrive la directory root sul blocco 0
-        disk_write(disk, 0, (const char*)root_dir);
+        // Scrive la directory root sul blocco assegnato
+        char block_data[BLOCK_SIZE];
+        memset(block_data, 0, BLOCK_SIZE);
+        memcpy(block_data, root_dir, sizeof(Directory));
+        disk_write(disk, root_dir->fcb.start_block, block_data);
         disk_save_fat(disk);
 
         if (DEBUG) {
-            printf("Directory root creata e scritta nel blocco 0\n");
+            printf("Directory root creata e scritta nel blocco %d\n", root_dir->fcb.start_block);
         }
     } else {
-        disk_read(disk, 0, (char*) root_dir);
+        disk_read(disk, 0, (char*) root_dir); // Assumendo che il blocco 0 sia root
     }
 
     Directory* current_dir = root_dir;
 
     while (1) {
-        char prompt_str[MAX_DIR_NAME + 4];
-        snprintf(prompt_str, sizeof(prompt_str), "%s> ", current_dir->name);
+        char prompt_str[MAX_FILENAME_LENGTH + 4];
+        snprintf(prompt_str, sizeof(prompt_str), "%s> ", current_dir->fcb.name);
 
         char* input = readline(prompt_str);
 
