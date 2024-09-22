@@ -102,10 +102,12 @@ void test_create_file() {
     // Creiamo una directory root per contenere il file
     Directory* root_dir = (Directory*) malloc(sizeof(Directory));
     memset(root_dir, 0, sizeof(Directory));
-    strcpy(root_dir->name, "/");
-    root_dir->start_block = 0;
-    root_dir->parent_block = -1;
+    strcpy(root_dir->fcb.name, "/");
+    root_dir->fcb.start_block = 0;
+    root_dir->fcb.size = 0;
+    root_dir->fcb.is_directory = 1;
     root_dir->num_entries = 0;
+    root_dir->parent_block = -1;
     disk_write(disk, 0, (const char*)root_dir);
 
     FileHandle* file = create_file(disk, "test_file");
@@ -126,40 +128,22 @@ void test_write_file() {
     printf("=======================\n");
 
     Disk* disk = disk_init("test_disk.bin", 1);
-
-    // Creiamo una directory root per contenere il file
-    Directory* root_dir = (Directory*) malloc(sizeof(Directory));
-    memset(root_dir, 0, sizeof(Directory));
-    strcpy(root_dir->name, "/");
-    root_dir->start_block = 0;
-    root_dir->parent_block = -1;
-    root_dir->num_entries = 0;
-    disk_write(disk, 0, (const char*)root_dir);
-
     FileHandle* file = create_file(disk, "test_file");
 
     const char* data_to_write = "Test di Prova per File!";
-    write_file(file, disk, data_to_write, strlen(data_to_write));
+    write_file(file, disk, data_to_write, strlen(data_to_write) + 1);
 
-    // Leggi il contenuto del file dal disco
     char buffer[BLOCK_SIZE];
-    disk_read(disk, file->start_block, buffer);
+    disk_read(disk, file->fcb.start_block, buffer);
 
-    // Salta il FileMetadata
-    FileMetadata metadata;
-    memcpy(&metadata, buffer, sizeof(FileMetadata));
-
-    // Leggi il contenuto del file dopo il metadata
-    char* file_content = buffer + sizeof(FileMetadata);
-
-    if (strncmp(file_content, data_to_write, strlen(data_to_write)) == 0) {
-        test_pass("test_write_file");
-    } else {
-        test_fail("test_write_file");
+    if (strcmp(buffer, data_to_write) != 0) {
+        printf("Errore: I dati scritti non corrispondono\n");
+        return;
     }
 
+    printf("write_file: OK\n");
+
     free(file);
-    free(root_dir);
     disk_close(disk);
 }
 
@@ -169,38 +153,22 @@ void test_read_file() {
     printf("=======================\n");
 
     Disk* disk = disk_init("test_disk.bin", 1);
-
-    // Creiamo una directory root per contenere il file
-    Directory* root_dir = (Directory*) malloc(sizeof(Directory));
-    memset(root_dir, 0, sizeof(Directory));
-    strcpy(root_dir->name, "/");
-    root_dir->start_block = 0;
-    root_dir->parent_block = -1;
-    root_dir->num_entries = 0;
-    disk_write(disk, 0, (const char*)root_dir);
-
     FileHandle* file = create_file(disk, "test_file");
 
     const char* data_to_write = "Test di Prova per File!";
-    write_file(file, disk, data_to_write, strlen(data_to_write));
-
-    // Riposiziona l'handle all'inizio del file
-    file->current_block = file->start_block;
-    file->position = sizeof(FileMetadata);
+    write_file(file, disk, data_to_write, strlen(data_to_write) + 1);
 
     char buffer[BLOCK_SIZE];
-    memset(buffer, 0, BLOCK_SIZE);
+    read_file(file, disk, buffer, strlen(data_to_write) + 1);
 
-    read_file(file, disk, buffer, strlen(data_to_write));
-
-    if (strncmp(buffer, data_to_write, strlen(data_to_write)) == 0) {
-        test_pass("test_read_file");
-    } else {
-        test_fail("test_read_file");
+    if (strcmp(buffer, data_to_write) != 0) {
+        printf("Errore: I dati letti non corrispondono\n");
+        return;
     }
 
+    printf("read_file: OK\n");
+
     free(file);
-    free(root_dir);
     disk_close(disk);
 }
 
@@ -214,10 +182,12 @@ void test_erase_file() {
     // Creiamo una directory root per contenere il file
     Directory* root_dir = (Directory*) malloc(sizeof(Directory));
     memset(root_dir, 0, sizeof(Directory));
-    strcpy(root_dir->name, "/");
-    root_dir->start_block = 0;
-    root_dir->parent_block = -1;
+    strcpy(root_dir->fcb.name, "/");
+    root_dir->fcb.start_block = 0;
+    root_dir->fcb.size = 0;
+    root_dir->fcb.is_directory = 1;
     root_dir->num_entries = 0;
+    root_dir->parent_block = -1;
     disk_write(disk, 0, (const char*)root_dir);
 
     FileHandle* file = create_file(disk, "test_file");
@@ -227,7 +197,7 @@ void test_erase_file() {
 
     erase_file(disk, file, "test_file");
 
-    if (disk->fat.entries[file->start_block].file == -2) {
+    if (disk->fat.entries[file->fcb.start_block].file == -2) {
         test_pass("test_erase_file");
     } else {
         test_fail("test_erase_file");
@@ -247,7 +217,7 @@ void test_create_directory() {
 
     Directory* root = create_dir(disk, NULL, "/");
 
-    if (root != NULL && strcmp(root->name, "/") == 0) {
+    if (root != NULL && strcmp(root->fcb.name, "/") == 0) {
         test_pass("test_create_directory");
     } else {
         test_fail("test_create_directory");
@@ -267,7 +237,7 @@ void test_create_subdirectory() {
     Directory* root = create_dir(disk, NULL, "/");
     Directory* subdir = create_dir(disk, root, "subdir");
 
-    if (subdir != NULL && strcmp(subdir->name, "subdir") == 0 && root->num_entries == 1) {
+    if (subdir != NULL && strcmp(subdir->fcb.name, "subdir") == 0 && root->num_entries == 1) {
         test_pass("test_create_subdirectory");
     } else {
         test_fail("test_create_subdirectory");
@@ -315,7 +285,7 @@ void test_change_directory() {
     Directory* current_dir = root;
     change_dir(disk, &current_dir, "subdir");
 
-    if (current_dir != NULL && strcmp(current_dir->name, "subdir") == 0) {
+    if (current_dir != NULL && strcmp(current_dir->fcb.name, "subdir") == 0) {
         test_pass("test_change_directory");
     } else {
         test_fail("test_change_directory");
@@ -338,7 +308,7 @@ void test_erase_directory() {
 
     erase_dir(disk, subdir);
 
-    if (disk->fat.entries[subdir->start_block].file == -2) {
+    if (disk->fat.entries[subdir->fcb.start_block].file == -2) {
         test_pass("test_erase_directory");
     } else {
         test_fail("test_erase_directory");
