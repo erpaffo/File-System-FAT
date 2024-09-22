@@ -1,4 +1,3 @@
-// file.c
 #include "file.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -75,6 +74,7 @@ void write_file(FileHandle* handle, Disk* disk, const void* buffer, int size) {
                     return;
                 }
                 fat_set_next_block(&disk->fat, block, next_block);
+                fat_set_next_block(&disk->fat, next_block, -1); 
             }
             block = next_block;
             position = 0;

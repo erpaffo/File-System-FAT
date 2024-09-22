@@ -32,11 +32,6 @@ typedef struct {
     int position;          // Posizione corrente nel file
 } FileHandle;
 
-// Struttura per gestire i file e le directory
-typedef struct {
-    FileControlBlock fcb;              // FCB dell'entry (file o directory)
-} DirectoryEntry;
-
 // Struttura per la directory
 typedef struct {
     FileControlBlock fcb;                     // FCB della directory stessa

@@ -6,4 +6,6 @@
 
 #define MAX_FILENAME_LENGTH 100
 
-#define MAX_DIR_ENTRIES 20
+#define MAX_DIR_ENTRIES 3
+
+#define MAX_ENTRIES_PER_BLOCK ((BLOCK_SIZE - sizeof(int)) / sizeof(FileControlBlock))

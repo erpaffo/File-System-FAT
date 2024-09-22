@@ -1,6 +1,4 @@
-// directory.c
 #include "directory.h"
-#include "file.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -27,26 +25,33 @@ Directory* create_dir(Disk* disk, Directory* parent, const char* dirname) {
     dir->fcb.size = 0;
     dir->fcb.is_directory = 1;
     dir->num_entries = 0;
-
     dir->parent_block = (parent != NULL) ? parent->fcb.start_block : -1;
 
     if (DEBUG) {
         printf("Creazione directory %s. Primo blocco: %d\n", dirname, free_block);
     }
 
-    // Scrivi il Directory sul disco
+    // Scrivi la directory sul disco
     char block_data[BLOCK_SIZE];
     memset(block_data, 0, BLOCK_SIZE);
+    // Copia solo fino a BLOCK_SIZE per evitare overflow
     memcpy(block_data, dir, sizeof(Directory));
     disk_write(disk, free_block, block_data);
 
     if (parent != NULL) {
+        if (parent->num_entries >= MAX_DIR_ENTRIES) {
+            printf("Errore: Numero massimo di entries raggiunto nella directory %s\n", parent->fcb.name);
+            fat_free_block(&disk->fat, free_block);
+            free(dir);
+            return NULL;
+        }
         // Aggiorna la directory padre
-        parent->entries[parent->num_entries].start_block = free_block;
-        parent->entries[parent->num_entries].is_directory = 1;
-        strncpy(parent->entries[(parent)->num_entries].name, dirname, MAX_FILENAME_LENGTH - 1);
+        parent->entries[parent->num_entries] = dir->fcb;
         parent->num_entries++;
-        disk_write(disk, parent->fcb.start_block, (const char*)parent);
+        // Scrivi la directory padre aggiornata sul disco
+        memset(block_data, 0, BLOCK_SIZE);
+        memcpy(block_data, parent, sizeof(Directory));
+        disk_write(disk, parent->fcb.start_block, block_data);
     }
 
     return dir;
@@ -56,9 +61,9 @@ Directory* create_dir(Disk* disk, Directory* parent, const char* dirname) {
 void erase_dir(Disk* disk, Directory* dir) {
     for (int i = 0; i < dir->num_entries; i++) {
         if (dir->entries[i].is_directory) {
-            Directory sub_dir;
-            disk_read(disk, dir->entries[i].start_block, (char*)&sub_dir);
-            erase_dir(disk, &sub_dir);
+            Directory* sub_dir = (Directory*) malloc(sizeof(Directory));
+            disk_read(disk, dir->entries[i].start_block, (char*)sub_dir);
+            erase_dir(disk, sub_dir);
         } else {
             FileHandle handle;
             handle.fcb = dir->entries[i];
@@ -98,7 +103,7 @@ void change_dir(Disk* disk, Directory** current_dir, const char* dirname) {
 // Elenca i contenuti della directory
 void list_dir(Disk* disk, Directory* dir) {
     printf("Contenuto della directory %s:\n", dir->fcb.name);
-    for (int i = 0; i < (dir)->num_entries; i++) {
+    for (int i = 0; i < dir->num_entries; i++) {
         printf("%s%s\n", dir->entries[i].name, dir->entries[i].is_directory ? "/" : "");
     }
 }

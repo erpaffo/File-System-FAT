@@ -37,26 +37,16 @@ int fat_get_free_block(Fat* fat) {
 
 // Alloca un blocco
 int fat_alloc_block(Fat* fat) {
-    int free_block = fat_get_free_block(fat);
-    if (fat->free_block_idx == -1) {
-        printf("[ERROR] Nessun blocco libero disponibile\n");
-        return -1;
+    int free_block = fat->free_block_idx;
+    if (free_block == -1) {
+        return -1; // Nessun blocco libero
     }
 
-    int block = fat_get_free_block(fat);
-    if (block == -1) {
-        printf("[DEBUG] Non ci sono blocchi liberi disponibili.\n");
-        return -1;
-    }
-
-    // Aggiorna il blocco come occupato
-    fat->entries[block].file = 1;  // Imposta il blocco come "in uso"
+    fat->free_block_idx = fat->entries[free_block].next_free_block;
+    fat->entries[free_block].file = 1;
+    fat->entries[free_block].next_block = -1;
     fat->entries[free_block].next_free_block = -1;
-
-    if (DEBUG) {
-        printf("[DEBUG] Allocato blocco: %d\n", free_block);
-    }
-    return block;
+    return free_block;
 }
 
 // Libera un blocco
@@ -75,6 +65,8 @@ void fat_free_block(Fat* fat, int block) {
 
     fat->entries[block].file = -2;  // Imposta il blocco come libero
     fat->entries[block].next_block = -1;  // Resetta il puntatore al blocco successivo
+    fat->entries[block].next_free_block = fat->free_block_idx;
+    fat->free_block_idx = block;
 
     if (DEBUG) {
         printf("[DEBUG] Blocco %d liberato e aggiunto alla free list.\n", block);
